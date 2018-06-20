@@ -118,10 +118,12 @@ class vis_obj(object):
         self.u = u
         self.v = v
         self.r = r
+        self.r_noshift = r
         self.i = i
+        self.i_noshift = i
         self.wt = wt
 
-    def deproject(self,inc,pa):
+    def deproject(self, inc, pa):
         '''
         Method that deprojects the visibilities using an inclination
         and position angle.
@@ -139,7 +141,25 @@ class vis_obj(object):
         vprime = self.u * np.sin(pa) + self.v * np.cos(pa)
         self.rho = np.sqrt(uprime**2. + vprime**2.)
 
-    def bin_vis(self,nbins=20,deproj=True,use_wt=True):
+    def phase_shift(self, x_shift, y_shift):
+        '''
+        Method to apply a shift to the phase center.
+        From Pearson 1999.
+        INPUTS:
+        - x_shift: Shift in RA (in marcsec)
+        - y_shift: Shift in Dec (in marcsec)
+        OUTPUTS:
+        - Shifted real and imaginary parts.
+        '''
+        x_shift *= np.pi / 1000. / 3600. / 180. # To radians
+        y_shift *= np.pi / 1000. / 3600. / 180.
+
+        self.r = self.r_noshift * np.cos(-2. * np.pi * (x_shift*self.u
+        + y_shift*self.v))
+        self.i = self.i_noshift * np.cos(-2. * np.pi * (x_shift*self.u
+        + y_shift*self.v))
+
+    def bin_vis(self, nbins=20, deproj=True, use_wt=True):
         '''
         Method to bin the visibilities.
         INPUTS:
