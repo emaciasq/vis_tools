@@ -67,6 +67,8 @@ class vis_obj(object):
         # Initialization of some attributes used later
         self.bin_centers = None
         self.deproj = False # Are the binned visibilities deprojected?
+        self.r_noshift = self.r
+        self.i_noshift = self.i
 
     def import_vis(self,input_file):
         '''
@@ -118,10 +120,9 @@ class vis_obj(object):
         self.u = u
         self.v = v
         self.r = r
-        self.r_noshift = r
         self.i = i
-        self.i_noshift = i
         self.wt = wt
+        self.sigma = 1.0 / np.sqrt(self.wt)
 
     def deproject(self, inc, pa):
         '''
@@ -151,15 +152,20 @@ class vis_obj(object):
         OUTPUTS:
         - Shifted real and imaginary parts.
         '''
-        x_shift *= np.pi / 1000. / 3600. / 180. # To radians
-        y_shift *= np.pi / 1000. / 3600. / 180.
+        x_shift *= -np.pi / 1000. / 3600. / 180. # To radians
+        y_shift *= -np.pi / 1000. / 3600. / 180.
 
-        self.r = self.r_noshift * np.cos(-2. * np.pi * (x_shift*self.u
-        + y_shift*self.v))
-        self.i = self.i_noshift * np.cos(-2. * np.pi * (x_shift*self.u
-        + y_shift*self.v))
+        # self.r = self.r_noshift * np.cos(-2. * np.pi * (x_shift*self.u
+        # + y_shift*self.v))
+        # self.i = self.i_noshift * np.sin(-2. * np.pi * (x_shift*self.u
+        # + y_shift*self.v))
+        shift = np.exp(-2.0 * np.pi * 1.0j *
+        (self.u * -x_shift + self.v * -y_shift))
+        vis_shifted = (self.r_noshift + self.i_noshift * 1.0j) * shift
+        self.r = vis_shifted.real
+        self.i = vis_shifted.imag
 
-    def bin_vis(self, nbins=20, deproj=True, use_wt=True):
+    def bin_vis(self, nbins=20, lambda_lim = None, deproj=True, use_wt=True):
         '''
         Method to bin the visibilities.
         INPUTS:
@@ -185,6 +191,7 @@ class vis_obj(object):
         - self.i_err: error of the mean within bins for imaginary part of
         visibilities (in Jy, array).
         '''
+        # Checking correct inputs
         if deproj:
             try:
                 uvwave = self.rho
@@ -196,24 +203,70 @@ class vis_obj(object):
             uvwave = self.uvwave
             self.deproj = False
 
+        if type(nbins) is list:
+            if type(lambda_lim) is list:
+                if len(nbins) > len(lambda_lim)+1:
+                    raise IOError('lambda_lim should have the same number '+
+                    'of elements, or the same minus 1, as nbins.')
+                elif len(nbins) == len(lambda_lim)+1:
+                    lambda_lim.append(max(uvwave))
+                elif len(nbins) < len(lambda_lim):
+                    raise IOError('lambda_lim should have the same number '+
+                    'of elements, or the same minus 1, as nbins.')
+            elif len(nbins) > 2:
+                raise IOError('If nbins has more than two elements, lambda_lim'+
+                ' should be a list with the same number of elements, or the '+
+                'same minus 1, as nbins.')
+            elif len(nbins) == 2:
+                if lambda_lim == None:
+                    raise IOError('If nbins has two elements, lambda_lim needs'+
+                    ' at least one value.')
+                lambda_lim = [lambda_lim,max(uvwave)]
+            elif len(nbins) == 1:
+                if lambda_lim == None:
+                    lambda_lim = [max(uvwave)]
+                else:
+                    lambda_lim = [lambda_lim]
+        else:
+            nbins = [nbins]
+            if type(lambda_lim) is list:
+                raise IOError('If lambda_lim is given as a list, nbins needs '+
+                'to be a list as well.')
+            elif lambda_lim == None:
+                lambda_lim = [max(uvwave)]
+            else:
+                lambda_lim = [lambda_lim]
+
         if use_wt:
             wt = self.wt
         else:
             wt = 1.0
 
-        maxbin = max(uvwave)
-        bin_width = maxbin/nbins
-        self.bin_centers = np.ones(shape=(nbins))
-        self.r_binned = np.ones(shape=(nbins))
-        self.r_sigma = np.ones(shape=(nbins))
-        self.r_err = np.ones(shape=(nbins))
-        self.i_binned = np.ones(shape=(nbins))
-        self.i_sigma = np.ones(shape=(nbins))
-        self.i_err = np.ones(shape=(nbins))
-        for i in range(nbins):
-            self.bin_centers[i] = bin_width*i + bin_width/2.
-            inbin = np.where((uvwave >= self.bin_centers[i] - bin_width/2.) &
-            (uvwave < self.bin_centers[i] + bin_width/2.))
+        ntot = sum(nbins)
+        self.bin_widths = np.ones(shape=(ntot))
+        self.bin_centers = np.ones(shape=(ntot))
+        self.r_binned = np.ones(shape=(ntot))
+        self.r_sigma = np.ones(shape=(ntot))
+        self.r_err = np.ones(shape=(ntot))
+        self.i_binned = np.ones(shape=(ntot))
+        self.i_sigma = np.ones(shape=(ntot))
+        self.i_err = np.ones(shape=(ntot))
+        i_min = 0
+        for i in range(len(nbins)):
+            if i == 0:
+                lambda_min = 0.0
+            else:
+                lambda_min = lambda_lim[i-1]
+            bin_width = (lambda_lim[i] - lambda_min)/nbins[i]
+            for j in range(nbins[i]):
+                self.bin_widths[i_min+j] = bin_width
+                self.bin_centers[i_min+j] = lambda_min + bin_width*j + bin_width/2.
+            i_min += nbins[i]
+
+        for i in range(ntot):
+            bin_width = self.bin_widths[i]
+            inbin = np.where((uvwave > self.bin_centers[i]-bin_width/2.) &
+            (uvwave <= self.bin_centers[i]+bin_width/2.))
             if len(inbin[0]) > 1:
                 if use_wt:
                     N_inbin = len(self.r[inbin][wt[inbin] > 0])

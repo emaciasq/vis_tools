@@ -272,10 +272,10 @@ def get_vis_obs(calms,spwids=None):
     A vis_obj object with the visiblities in it.
     '''
     # We average the calibrated visibilities in channels and time
-    obsms = calms+'.avg.ms'
-    if os.path.isdir(obsms) == False:
-        split(vis=calms,outputvis=obsms,keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
-
+    # obsms = calms+'.avg.ms'
+    # if os.path.isdir(obsms) == False:
+    #     split(vis=calms,outputvis=obsms,keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
+    obsms = calms
     # Extract information of the channels
     ms.open(obsms)
     ms.selectinit(reset=True)
