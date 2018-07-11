@@ -32,11 +32,11 @@ class CASA_vis_obj(vis_tools.vis_obj):
     - self.freqs: attay with frequency of each spw in Hz.
     - self.spwids: spwi ids used.
     '''
-    def __init__(self,mydat,freqs,name='',spwids=[]):
+    def __init__(self, mydat, freqs, name='', spwids=[], avg_pols=False):
         '''
         INPUTS:
         - mydat: list of dictionaries returned by ms.getdata()
-        - freqs: list of frequencies for which there is an element in mydat
+        - freqs: array of frequencies for each channel and spw
         OPTIONAL INPUTS:
         - name: name of the measurement set from where these visibilities were
         taken from.
@@ -46,33 +46,56 @@ class CASA_vis_obj(vis_tools.vis_obj):
         '''
         if type(mydat) is not list:
             mydat = [mydat]
-        if (type(freqs) is not list) and (type(freqs) is not np.ndarray):
-            freqs = [freqs]
-        self.freqs = np.array(freqs) * 1.0e9 # frequencies in Hz
-        self.wl = light_speed / (np.array(freqs) * 1.0e9) # wavelengths in meters
+        # if (type(freqs) is not list) and (type(freqs) is not np.ndarray):
+        #     freqs = [freqs]
+        self.freqs = freqs # frequencies in Hz
+        mydat = np.array(mydat)
+        self.wl = light_speed / self.freqs # wavelengths in meters
         rr = []
         ii = []
         uu = []
         vv = []
         wt = []
-        for i,dat in enumerate(mydat):
-            # We first build the u, v, and wt arrays with the same shape
-            # as the visibilities
-            u_temp = np.zeros_like(dat['real'])
-            v_temp = np.zeros_like(dat['real'])
-            wt_temp = np.zeros_like(dat['real'])
-            for j in range(dat['real'].shape[0]): # For all polarizations
+        for i,dat in enumerate(mydat): # For all spws
+            if avg_pols: # If we want to average the polarizations
+                wt_temp = np.zeros_like(dat['real'])
+                for j in range(dat['real'].shape[0]): # For all polarizations
+                    for k in range(dat['real'].shape[1]): # For every channel
+                        wt_temp[j,k,:] = dat['weight'][j,:]
+                wt_temp[dat['flag'] == True] = 0.0
+                real_temp = ( np.sum(dat['real'] * wt_temp, axis=0) /
+                np.sum(wt_temp, axis=0) )
+                imag_temp = ( np.sum(dat['imaginary'] * wt_temp, axis=0) /
+                np.sum(wt_temp, axis=0) )
+                wt_temp = np.sum(wt_temp, axis=0)
+                # We build the u, and v arrays with the same shape
+                # as the visibilities
+                u_temp = np.zeros_like(real_temp)
+                v_temp = np.zeros_like(real_temp)
                 for k in range(dat['real'].shape[1]): # For every channel
-                    u_temp[j,k,:] = dat['u']
-                    v_temp[j,k,:] = dat['v']
-                    wt_temp[j,k,:] = dat['weight'][j,:]
+                    u_temp[k,:] = dat['u'] / self.wl[i,k]
+                    v_temp[k,:] = dat['v'] / self.wl[i,k]
+            else:
+                # We build the u, v, and wt arrays with the same shape
+                # as the visibilities
+                u_temp = np.zeros_like(dat['real'])
+                v_temp = np.zeros_like(dat['real'])
+                wt_temp = np.zeros_like(dat['real'])
+                real_temp = dat['real']
+                imag_temp = dat['imaginary']
+                for j in range(dat['real'].shape[0]): # For all polarizations
+                    for k in range(dat['real'].shape[1]): # For every channel
+                        u_temp[j,k,:] = dat['u'] / self.wl[i,k]
+                        v_temp[j,k,:] = dat['v'] / self.wl[i,k]
+                        wt_temp[j,k,:] = dat['weight'][j,:]
+                wt_temp[dat['flag'] == True] = 0.0
             # We select points that are not flagged
             # The indexing will flatten the array into a 1D array
-            uu.append(u_temp[dat['flag'] == False] / self.wl[i])
-            vv.append(v_temp[dat['flag'] == False] / self.wl[i])
-            wt.append(wt_temp[dat['flag'] == False])
-            rr.append(dat['real'][dat['flag'] == False])
-            ii.append(dat['imaginary'][dat['flag'] == False])
+            uu.append(u_temp[wt_temp != 0.0])
+            vv.append(v_temp[wt_temp != 0.0])
+            wt.append(wt_temp[wt_temp != 0.0])
+            rr.append(real_temp[wt_temp != 0.0])
+            ii.append(imag_temp[wt_temp != 0.0])
         # We concatenate all spws together
         u = np.concatenate(uu,axis=0)
         v = np.concatenate(vv,axis=0)
@@ -85,7 +108,7 @@ class CASA_vis_obj(vis_tools.vis_obj):
         super(CASA_vis_obj,self).__init__(u=u,v=v,r=r,i=i,wt=wt,name=name)
 
 def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del=0,
-    residuals = True):
+    del_cross=False, residuals = True):
     '''
     Function that simulates a radiointerferometric observation out of a
     model fits image. It will produce the visibilities of the model using
@@ -183,7 +206,7 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
         # We import the image into CASA format
         imname0 = fitsimage[:-4]+'image'
         importfits(fitsimage=fitsimage,imagename=imname0,overwrite=True,defaultaxes=False)
-        os.system('rm '+fitsimage)
+        # os.system('rm '+fitsimage)
 
         # We modify the image to include the stokes and frequency axis.
         util = simutil()
@@ -207,11 +230,12 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
             residualms = fitsimage[:-4]+'model_vis.avg.spw'+str(spwid+spw_del)+'freq'+freq+'.residuals_ms'
 #            os.system('cp -r ' + modelms + ' ' + residualms)
             if os.path.isdir(residualms) == False:
-                split(vis=calms,outputvis=residualms,spw=str(spwid+spw_del),keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
-                # We remove the pointing table
-                tb.open(residualms+'/POINTING',nomodify=False)
-                tb.removerows(range(tb.nrows()))
-                tb.done()
+                os.system('cp -r ' + modelms + ' ' + residualms)
+                # split(vis=calms,outputvis=residualms,spw=str(spwid+spw_del),keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
+                # # We remove the pointing table
+                # tb.open(residualms+'/POINTING',nomodify=False)
+                # tb.removerows(range(tb.nrows()))
+                # tb.done()
 
         # We simulate the observation
         sm.openfromms(modelms)
@@ -222,16 +246,26 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
         os.system('rm -r '+imname)
 
         # Extract visibilities of the model
-        ms.open(modelms)
+        ms.open(modelms, nomodify=(del_cross==False))
         ms.selectinit(reset=True)
-#        ms.selectinit(datadescid=spwid+spw_del)
         modeldata = ms.getdata(['real','imaginary','u','v','weight','flag','data'])
+        if del_cross:
+            modeldata['real'][1,:,:] = modeldata['real'][0,:,:]
+            modeldata['real'][2,:,:] = modeldata['real'][0,:,:]
+            modeldata['imaginary'][1,:,:] = modeldata['imaginary'][0,:,:]
+            modeldata['imaginary'][2,:,:] = modeldata['imaginary'][0,:,:]
+            modeldata['data'][1,:,:] = modeldata['data'][0,:,:]
+            modeldata['data'][2,:,:] = modeldata['data'][0,:,:]
+            modeldata['flag'][1,:,:] = True
+            modeldata['flag'][2,:,:] = True
+            ms.putdata({'data':modeldata['data']})
         mydat.append(modeldata) # this returns a dictionary of arrays
         ms.close()
 
         # Residuals
         if residuals:
-            obsms = calms+'.avg.ms'
+            # obsms = calms+'.avg.ms'
+            obsms = calms
             if os.path.isdir(obsms) == False:
                 split(vis=calms,outputvis=obsms,keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
             # Extract visibilities of observations
@@ -244,23 +278,25 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
             resdata['real'] = resdata['real'] - modeldata['real']
             resdata['imaginary'] = resdata['imaginary'] - modeldata['imaginary']
             resdata['data'] = resdata['data'] - modeldata['data']
+            if del_cross:
+                resdata['flag'][1,:,:] = True
+                resdata['flag'][2,:,:] = True
             resdat.append(resdata)
             # Save residuals to ms
             ms.open(residualms,nomodify=False)
             ms.selectinit(reset=True)
-#            ms.selectinit(datadescid=spwid+spw_del)
             ms.putdata({'data':resdata['data']})
             ms.close()
 
-    model_vis = CASA_vis_obj(mydat,freqs, name = 'model', spwids = spwids)
+    model_vis = CASA_vis_obj(mydat, np.array([freqs]).T*1e9, name = 'model', spwids = spwids)
 
     if residuals:
-        res_vis = CASA_vis_obj(resdat, freqs, name = 'residuals', spwids = spwids)
+        res_vis = CASA_vis_obj(resdat, np.array([freqs]).T*1e9, name = 'residuals', spwids = spwids)
         return model_vis, res_vis
     else:
         return model_vis
 
-def get_vis_obs(calms,spwids=None):
+def get_vis_obs(calms, spwids=None, avg_pols=False, del_cross=False):
     '''
     Function that retrieves the visibilities of a calibrated measurement set.
 
@@ -275,25 +311,43 @@ def get_vis_obs(calms,spwids=None):
     # obsms = calms+'.avg.ms'
     # if os.path.isdir(obsms) == False:
     #     split(vis=calms,outputvis=obsms,keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
-    obsms = calms
+    # obsms = calms
     # Extract information of the channels
-    ms.open(obsms)
-    ms.selectinit(reset=True)
-    ms.selectinit()
-    axis_info = ms.getspectralwindowinfo()
+    # ms.open(calms)
+    # ms.selectinit(reset=True)
+    # ms.selectinit()
+    # This method of getting the spw information does not seem to work always
+    # axis_info = ms.getspectralwindowinfo()
 
+    tb.open(calms)
+    # data = tb.getcol("DATA")
+    # flag = tb.getcol("FLAG")
+    # uvw = tb.getcol("UVW")
+    # weight = tb.getcol("WEIGHT")
     if spwids == None:
-        spwids = axis_info.keys()
+        spwids = np.unique(tb.getcol("DATA_DESC_ID"))
+    tb.close()
+    # Get the frequency information
+    tb.open(calms+'/SPECTRAL_WINDOW')
+    freqstb = tb.getcol("CHAN_FREQ")
+    tb.close()
+
+    ms.open(calms)
+    ms.selectinit(reset=True)
     mydat = []
     freqs = []
     for spwid in spwids:
-        freqs.append(axis_info[spwid]['RefFreq'] / 1.0e9)
+        freqs.append(freqstb[:,spwid])
         # Extract visibilities of observation
         ms.selectinit(reset=True)
-        ms.selectinit(datadescid=int(spwid))
-        mydat.append(ms.getdata(['real','imaginary','u','v','weight','flag']))
+        ms.selectinit(datadescid=spwid)
+        obsdata = ms.getdata(['real','imaginary','u','v','weight','flag'])
+        if del_cross:
+            obsdata['flag'][1,:,:] = True
+            obsdata['flag'][2,:,:] = True
+        mydat.append(obsdata)
     ms.close()
 
-    obsdat = CASA_vis_obj(mydat,freqs, name = obsms, spwids = spwids)
+    obsdat = CASA_vis_obj(mydat, np.array(freqs), name = calms, spwids = spwids, avg_pols=avg_pols)
 
     return obsdat

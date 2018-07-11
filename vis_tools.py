@@ -248,6 +248,7 @@ class vis_obj(object):
         self.r_binned = np.ones(shape=(ntot))
         self.r_sigma = np.ones(shape=(ntot))
         self.r_err = np.ones(shape=(ntot))
+        self.r_err2 = np.ones(shape=(ntot))
         self.i_binned = np.ones(shape=(ntot))
         self.i_sigma = np.ones(shape=(ntot))
         self.i_err = np.ones(shape=(ntot))
@@ -289,9 +290,11 @@ class vis_obj(object):
                     # Error of weighted mean
                     self.r_err[i] = ( np.std(self.r[inbin][wt[inbin] > 0]) *
                     np.sqrt(np.sum(wt[inbin]**2.))/wtsum )
+                    self.r_err2[i] = 1./np.sqrt(wtsum)
                 else:
                     self.r_sigma[i] = np.std(self.r[inbin])
                     self.r_err[i] = self.r_sigma[i] / np.sqrt(N_inbin)
+                    self.r_err2[i] = np.nan
                 # Imaginary part
                 self.i_binned[i], wtsum = np.average(self.i[inbin],
                 weights=wt[inbin], returned=True)
