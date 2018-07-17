@@ -22,6 +22,8 @@ class vis_obj(object):
     - r: real part of visibilities (in Jy, array).
     - i: imaginary part of visibilitites (in Jy, array).
     - wt: weights of visibilities (array).
+    - r_noshift, i_noshift: backup of real and imaginary parts
+    without any shifts (in Jy, array).
     - uvwave: uv distance, not deprojected (in lambdas, array).
     - name: optional name for the object.
     METHODS:
@@ -147,10 +149,22 @@ class vis_obj(object):
         Method to apply a shift to the phase center.
         From Pearson 1999.
         INPUTS:
-        - x_shift: Shift in RA (in marcsec)
-        - y_shift: Shift in Dec (in marcsec)
+        - x_shift: Shift in RA (in marcsec).
+        - y_shift: Shift in Dec (in marcsec).
         OUTPUTS:
         - Shifted real and imaginary parts.
+
+        NOTE:
+        The shift is defined as the offset that one needs to apply to the
+        absolute coordinates, i.e., if the phase center is at 100,100
+        (arbitrary units to simplify the example), and you want it to be at
+        101,99, then the shift would be +1,-1. In the equations below, the
+        sign of the offset is changed as it is taken into account as a
+        modification of the origin of coordinates. Following the above example,
+        if the position 100,100 is the original phase center, it would be the
+        origin (0,0), and 101,99 would be the position +1,-1. If we want the
+        latter to be the new phase center (i.e., the new 0,0 position), we need
+        to apply an offset equal to -1,+1.
         '''
         x_shift *= -np.pi / 1000. / 3600. / 180. # To radians
         y_shift *= -np.pi / 1000. / 3600. / 180.
@@ -170,8 +184,16 @@ class vis_obj(object):
         Method to bin the visibilities.
         INPUTS:
         - deproj: If True, bin deprojected visibilities.
-        - nbins: number of bins to bin the data.
-        - use_wt: If False, it will not use the weights of each visibility to
+        - nbins: number of bins to bin the data. If one wants to use different
+        bin sizes at different ranges of uv distance, nbins can be given as a
+        list. In that case, lambda_lim needs to be defined to give the borders
+        of the regions with different bin sizes.
+        - lambda_lim: maximum uv distance (in lambdas) to be used. If not given,
+        it uses the maximum uv distance in the visibilities. If nbins is given
+        as a list with N elements, lambda_lim needs to have N or N-1 elements.
+        If it has N-1, the last lambda_lim is assumed to be the maximum uv
+        distance in the visibilities.
+        - use_wt: If False, it will not use the weights of each visibility t
         calculate weighted means in each bin, and will do a normal average
         instead.
         OUTPUTS:
@@ -207,16 +229,16 @@ class vis_obj(object):
             if type(lambda_lim) is list:
                 if len(nbins) > len(lambda_lim)+1:
                     raise IOError('lambda_lim should have the same number '+
-                    'of elements, or the same minus 1, as nbins.')
+                    'of elements as nbins, or the same minus 1.')
                 elif len(nbins) == len(lambda_lim)+1:
                     lambda_lim.append(max(uvwave))
                 elif len(nbins) < len(lambda_lim):
                     raise IOError('lambda_lim should have the same number '+
-                    'of elements, or the same minus 1, as nbins.')
+                    'of elements as nbins, or the same minus 1.')
             elif len(nbins) > 2:
                 raise IOError('If nbins has more than two elements, lambda_lim'+
-                ' should be a list with the same number of elements, or the '+
-                'same minus 1, as nbins.')
+                ' should be a list with the same number of elements as nbins, '+
+                'or the same minus 1.')
             elif len(nbins) == 2:
                 if lambda_lim == None:
                     raise IOError('If nbins has two elements, lambda_lim needs'+

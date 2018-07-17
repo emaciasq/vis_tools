@@ -36,13 +36,13 @@ class CASA_vis_obj(vis_tools.vis_obj):
         '''
         INPUTS:
         - mydat: list of dictionaries returned by ms.getdata()
-        - freqs: array of frequencies for each channel and spw
+        - freqs: array of frequencies for each channel and spw (in Hz).
         OPTIONAL INPUTS:
         - name: name of the measurement set from where these visibilities were
         taken from.
         - spwids: spectral windows ids for which these visibilities have been
         computed.
-        (in GHz).
+        - avg_pols: If True, it will do a weighted average of the polarizations.
         '''
         if type(mydat) is not list:
             mydat = [mydat]
@@ -107,8 +107,8 @@ class CASA_vis_obj(vis_tools.vis_obj):
 
         super(CASA_vis_obj,self).__init__(u=u,v=v,r=r,i=i,wt=wt,name=name)
 
-def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del=0,
-    del_cross=False, residuals = True):
+def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
+    del_cross=False, residuals=True):
     '''
     Function that simulates a radiointerferometric observation out of a
     model fits image. It will produce the visibilities of the model using
@@ -119,31 +119,32 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
     and with the calibrated data in the 'data' datacolumn.
 
     INPUT parameters:
-    - calms: calibrated (observed) visibilities
+    - calms: calibrated (observed) visibilities.
     - model_images: list of model images at different frequencies, in fits format.
     These frequencies should be the central frequencies of the spws in the
     observations. They need to be in the same order, so first check the listobs
     of the observations. It has to be a list, even if you are simulating just
     one frequency.
     - freqs: list of central frequencies of the spws and model_images. It has to
-    be a list, even if you are simulating just one frequency. In GHz.
+    be a list, even if you are simulating just one frequency. In GHz, with just
+    six significant digits.
     - fwidths: width of the spws of the observations. It can be a list with an
     element for each spw (freqs), or it can be just one value, and it will be assumed
     that all spws have the same width. In MHz.
-    Optional parameters:
+    OPTIONAL parameters:
     - pa: position angle of the disk (from north to east). Provide it just if the disk
     needs to be rotated (DIAD images need to be rotated).
     - indirection: coordinates of the center of the model image. If not provided, it
     will look for this information in the header of the fits files.
-    - spw_del: "delay" in the spw id of the calibrated ms. In order to know if you need
-    to set this value, check the output of listobs (for the calibrated visibilities), and
-    then check the spw id of the first spectral window. If it is 0, you don't need to use
-    this parameter. If it is not 0, use that number.
     - residuals: Calculate residual visibilities (observation - model)?
-
+    - del_cross: If True, it will delete cross polarizations. Usually only used
+    for VLA observations, not for ALMA.
     OUTPUT:
     A vis_obj object with the visiblities in it.
     It will also create a simulated measurement set.
+
+    NOTE:
+    As of now, calms needs to have only one channel per spw.
     '''
     if len(model_images) != len(freqs):
         raise IOError('GET_SIM_MODEL: Number of frequencies should be the same as the number of input model images.')
@@ -177,7 +178,8 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
             spwid = obs_spwids[RefFreqs == freq0][0]
             spwids.append(spwid)
         except:
-            raise ValueError('GET_SIM_MODEL: Frequency '+freq+' is not one of the reference frequencies of calms.')
+            raise ValueError('GET_SIM_MODEL: Frequency '+freq+' is not one of '+
+            'the reference frequencies of calms. It could be a rounding issue.')
 
         if pa != 0.0:
             # Rotating image
@@ -186,7 +188,6 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
             mod_image = imObj[0].data[:,:] # image in matrix
             imObj.close()
 
-            #rotangle = -(pa - 90.0)
             rotangle = -(pa)
             rotdisk = scipy.ndimage.interpolation.rotate(mod_image,rotangle,reshape=False)
             fitsimage = fitsimage[:-4]+'rot.fits' # Name of rotated image
@@ -194,14 +195,9 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
 
         # We get the inbright and pixel size
         stats = imstat(fitsimage)
-        #head = imhead(fitsimage)
-        #delt = head['incr'][0]
-        #inbright = str(stats['max'][0]*(delt**2.)*1.0e23)+'Jy/pixel'
-        #delta = delt*180./np.pi*3600.
         delt = Header['cdelt1'] * np.pi / 180. # in radians
         inbright = str(stats['max'][0]*(delt**2.)*1.0e23)+'Jy/pixel'
         delta = delt*180./np.pi*3600. # in arcsec
-
 
         # We import the image into CASA format
         imname0 = fitsimage[:-4]+'image'
@@ -217,25 +213,18 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
         os.system('rm -r '+imname0)
 
         # We split the calibrated visibilities in spw
-        # and average in channels and time
-        #obsms = calms+'.spw'+str(spwid)+'.avg.ms'
-        modelms = fitsimage[:-4]+'model_vis.avg.spw'+str(spwid+spw_del)+'freq'+freq+'.ms'
+        modelms = fitsimage[:-4]+'model_vis.spw'+str(spwid)+'freq'+freq+'.ms'
         if os.path.isdir(modelms) == False:
-            split(vis=calms,outputvis=modelms,spw=str(spwid+spw_del),keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
+            split(vis=calms, outputvis=modelms, spw=str(spwid), keepflags=False,
+            datacolumn='data')
             # We remove the pointing table
             tb.open(modelms+'/POINTING',nomodify=False)
             tb.removerows(range(tb.nrows()))
             tb.done()
         if residuals:
-            residualms = fitsimage[:-4]+'model_vis.avg.spw'+str(spwid+spw_del)+'freq'+freq+'.residuals_ms'
-#            os.system('cp -r ' + modelms + ' ' + residualms)
+            residualms = fitsimage[:-4]+'model_vis.spw'+str(spwid)+'freq'+freq+'.residuals_ms'
             if os.path.isdir(residualms) == False:
                 os.system('cp -r ' + modelms + ' ' + residualms)
-                # split(vis=calms,outputvis=residualms,spw=str(spwid+spw_del),keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
-                # # We remove the pointing table
-                # tb.open(residualms+'/POINTING',nomodify=False)
-                # tb.removerows(range(tb.nrows()))
-                # tb.done()
 
         # We simulate the observation
         sm.openfromms(modelms)
@@ -250,6 +239,7 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
         ms.selectinit(reset=True)
         modeldata = ms.getdata(['real','imaginary','u','v','weight','flag','data'])
         if del_cross:
+            # If True, we flag the cross polarizations
             modeldata['real'][1,:,:] = modeldata['real'][0,:,:]
             modeldata['real'][2,:,:] = modeldata['real'][0,:,:]
             modeldata['imaginary'][1,:,:] = modeldata['imaginary'][0,:,:]
@@ -259,19 +249,15 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
             modeldata['flag'][1,:,:] = True
             modeldata['flag'][2,:,:] = True
             ms.putdata({'data':modeldata['data']})
-        mydat.append(modeldata) # this returns a dictionary of arrays
+        mydat.append(modeldata)
         ms.close()
 
         # Residuals
         if residuals:
-            # obsms = calms+'.avg.ms'
-            obsms = calms
-            if os.path.isdir(obsms) == False:
-                split(vis=calms,outputvis=obsms,keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
             # Extract visibilities of observations
-            ms.open(obsms)
+            ms.open(calms)
             ms.selectinit(reset=True)
-            ms.selectinit(datadescid=spwid+spw_del)
+            ms.selectinit(datadescid=spwid)
             resdata = ms.getdata(['real','imaginary','u','v','weight','flag','data'])
             ms.close()
             # Subtract model from observations
@@ -288,10 +274,12 @@ def get_sim_model(calms,model_images,freqs,fwidths,pa=0.0,indirection='',spw_del
             ms.putdata({'data':resdata['data']})
             ms.close()
 
-    model_vis = CASA_vis_obj(mydat, np.array([freqs]).T*1e9, name = 'model', spwids = spwids)
+    model_vis = CASA_vis_obj(mydat, np.array([freqs]).T*1e9, name = 'model',
+    spwids = spwids)
 
     if residuals:
-        res_vis = CASA_vis_obj(resdat, np.array([freqs]).T*1e9, name = 'residuals', spwids = spwids)
+        res_vis = CASA_vis_obj(resdat, np.array([freqs]).T*1e9,
+        name = 'residuals', spwids = spwids)
         return model_vis, res_vis
     else:
         return model_vis
@@ -301,16 +289,16 @@ def get_vis_obs(calms, spwids=None, avg_pols=False, del_cross=False):
     Function that retrieves the visibilities of a calibrated measurement set.
 
     INPUT:
-    - calms: calibrated measurement set. It should be splitted, with no other sources,
-    and with the calibrated data in the 'data' datacolumn.
+    - calms: calibrated measurement set. It should be splitted, with no other
+    sources, and with the calibrated data in the 'data' datacolumn.
     - spwids: list of spwids for which you want to get the visibilities.
+    - avg_pols: If True, it will do a weighted average of the polarizations.
+    - del_cross: If True, it will delete cross polarizations. Usually only used
+    for VLA observations, not for ALMA.
     OUTPUT:
     A vis_obj object with the visiblities in it.
     '''
     # We average the calibrated visibilities in channels and time
-    # obsms = calms+'.avg.ms'
-    # if os.path.isdir(obsms) == False:
-    #     split(vis=calms,outputvis=obsms,keepflags=False,width=20000,timebin='1e8s',datacolumn='data')
     # obsms = calms
     # Extract information of the channels
     # ms.open(calms)
@@ -348,6 +336,7 @@ def get_vis_obs(calms, spwids=None, avg_pols=False, del_cross=False):
         mydat.append(obsdata)
     ms.close()
 
-    obsdat = CASA_vis_obj(mydat, np.array(freqs), name = calms, spwids = spwids, avg_pols=avg_pols)
+    obsdat = CASA_vis_obj(mydat, np.array(freqs), name = calms, spwids = spwids,
+    avg_pols=avg_pols)
 
     return obsdat
