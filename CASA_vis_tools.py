@@ -115,27 +115,27 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
     the same uv coverage as the provided calibrated visibilities. It needs
     to simulate a model image for each spw of the observations. The visibilities
     will be averaged in time (limited by scans) and frequency (limited by spws).
-    The calibrated visibilities should already be splitted, with no other sources,
-    and with the calibrated data in the 'data' datacolumn.
+    The calibrated visibilities should already be splitted, with no other
+    sources, and with the calibrated data in the 'data' datacolumn.
 
     INPUT parameters:
     - calms: calibrated (observed) visibilities.
-    - model_images: list of model images at different frequencies, in fits format.
-    These frequencies should be the central frequencies of the spws in the
-    observations. They need to be in the same order, so first check the listobs
-    of the observations. It has to be a list, even if you are simulating just
-    one frequency.
+    - model_images: list of model images at different frequencies, in fits
+    format. These frequencies should be the central frequencies of the spws in
+    the observations. They need to be in the same order, so first check the
+    listobs of the observations. It has to be a list, even if you are simulating
+    just one frequency.
     - freqs: list of central frequencies of the spws and model_images. It has to
     be a list, even if you are simulating just one frequency. In GHz, with just
     six significant digits.
     - fwidths: width of the spws of the observations. It can be a list with an
-    element for each spw (freqs), or it can be just one value, and it will be assumed
-    that all spws have the same width. In MHz.
+    element for each spw (freqs), or it can be just one value, and it will be
+    assumed that all spws have the same width. In MHz.
     OPTIONAL parameters:
-    - pa: position angle of the disk (from north to east). Provide it just if the disk
-    needs to be rotated (DIAD images need to be rotated).
-    - indirection: coordinates of the center of the model image. If not provided, it
-    will look for this information in the header of the fits files.
+    - pa: position angle of the disk (from north to east). Provide it just if
+    the disk needs to be rotated (DIAD images need to be rotated).
+    - indirection: coordinates of the center of the model image. If not
+    provided, it will look for this information in the header of the fits files.
     - residuals: Calculate residual visibilities (observation - model)?
     - del_cross: If True, it will delete cross polarizations. Usually only used
     for VLA observations, not for ALMA.
@@ -147,7 +147,8 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
     As of now, calms needs to have only one channel per spw.
     '''
     if len(model_images) != len(freqs):
-        raise IOError('GET_SIM_MODEL: Number of frequencies should be the same as the number of input model images.')
+        raise IOError('GET_SIM_MODEL: Number of frequencies should be the same'+
+        ' as the number of input model images.')
     # We get the spectral windows of calms
     ms.open(calms)
     ms.selectinit(reset=True)
@@ -158,7 +159,7 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
     RefFreqs = []
     for key in axis_info.keys():
         obs_spwids.append(int(key))
-        RefFreqs.append(round(axis_info[key]['RefFreq']/1e9,6)) # in GHz
+        RefFreqs.append(round(axis_info[key]['RefFreq']/1e9,3)) # in GHz
     obs_spwids = np.array(obs_spwids)
     RefFreqs = np.array(RefFreqs)
 
@@ -189,9 +190,10 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
             imObj.close()
 
             rotangle = -(pa)
-            rotdisk = scipy.ndimage.interpolation.rotate(mod_image,rotangle,reshape=False)
+            rotdisk = scipy.ndimage.interpolation.rotate(mod_image, rotangle,
+            reshape=False)
             fitsimage = fitsimage[:-4]+'rot.fits' # Name of rotated image
-            rotImObj = pyfits.writeto(fitsimage,rotdisk,Header,clobber=True)
+            rotImObj = pyfits.writeto(fitsimage, rotdisk, Header, clobber=True)
 
         # We get the inbright and pixel size
         stats = imstat(fitsimage)
@@ -201,7 +203,8 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
 
         # We import the image into CASA format
         imname0 = fitsimage[:-4]+'image'
-        importfits(fitsimage=fitsimage,imagename=imname0,overwrite=True,defaultaxes=False)
+        importfits(fitsimage=fitsimage, imagename=imname0, overwrite=True,
+        defaultaxes=False)
         # os.system('rm '+fitsimage)
 
         # We modify the image to include the stokes and frequency axis.
@@ -222,7 +225,8 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
             tb.removerows(range(tb.nrows()))
             tb.done()
         if residuals:
-            residualms = fitsimage[:-4]+'model_vis.spw'+str(spwid)+'freq'+freq+'.residuals_ms'
+            residualms = (fitsimage[:-4]+'model_vis.spw'+str(spwid)+'freq'+freq+
+            '.residuals_ms')
             if os.path.isdir(residualms) == False:
                 os.system('cp -r ' + modelms + ' ' + residualms)
 

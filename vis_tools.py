@@ -35,7 +35,7 @@ class vis_obj(object):
     u,v coordinates).
     - export_fits: exports visibilities (full u,v coordinates) to a fits file.
     '''
-    def __init__(self,u=None,v=None,r=None,i=None,wt=None,name='',\
+    def __init__(self, u=None, v=None, r=None, i=None, wt=None, name='',
     input_file=None):
         '''
         INPUTS:
@@ -63,6 +63,7 @@ class vis_obj(object):
             self.i = i
             self.wt = wt
 
+        self.sigma = 1.0 / np.sqrt(self.wt)
         self.uvwave = np.sqrt(self.u**2. + self.v**2.)
 
         self.name = name
@@ -72,7 +73,7 @@ class vis_obj(object):
         self.r_noshift = self.r
         self.i_noshift = self.i
 
-    def import_vis(self,input_file):
+    def import_vis(self, input_file):
         '''
         Imports visibilities from a csv or a fits file. Depending on the
         extension of the input file, it will choose in which format to import
@@ -124,7 +125,6 @@ class vis_obj(object):
         self.r = r
         self.i = i
         self.wt = wt
-        self.sigma = 1.0 / np.sqrt(self.wt)
 
     def deproject(self, inc, pa):
         '''
@@ -339,13 +339,14 @@ class vis_obj(object):
                 self.i_sigma[i] = np.nan
                 self.i_err[i] = np.nan
 
-    def plot_vis(self,real=True,imaginary=False,deproj=None,nbins=20,\
-    errtype='wt',outfile='plot',overwrite=False,xlim=[],ylim=[]):
+    def plot_vis(self, real=True, imaginary=False, binned=True, deproj=None,
+    nbins=20, errtype='wt', outfile='plot', overwrite=False, xlim=[], ylim=[]):
         '''
         Plots visibilities vs uvdistance (deprojected or not).
         INPUTS:
         - real: plot real part of visibilities? (boolean)
         - imaginary: plot imaginary part of visibilities? (boolean)
+        - binned: plot binned visibilities? (boolean)
         - deproj: plot deprojected visibilities (if calculated)? (boolean)
         - nbins: number of bins to bin the data, if you have not already binned
         them. (integer)
@@ -358,39 +359,54 @@ class vis_obj(object):
         - xlim, ylim: x and y axis limits for plots (in klambdas and Jy).
         '''
         deproj = deproj if deproj is not None else self.deproj
-        if self.bin_centers == None:
-            print('WARNING: Running bin_vis with nbins='+str(nbins))
-            self.bin_vis(nbins=nbins,deproj=deproj)
-        if deproj:
-            if self.deproj:
-                outfile = outfile+'.deproj'
+        if binned:
+            if self.bin_centers == None:
+                print('WARNING: Running bin_vis with nbins='+str(nbins))
+                self.bin_vis(nbins=nbins,deproj=deproj)
+            if deproj:
+                if self.deproj:
+                    outfile = outfile+'.deproj'
+                else:
+                    raise IOError('You set deproj=True, but your binned'
+                    'visibilities are not deprojected.')
             else:
-                raise IOError('You set deproj=True, but your binned'
-                'visibilities are not deprojected.')
+                if self.deproj:
+                    raise IOError('You set deproj=False, but your binned'
+                    'visibilities are deprojected.')
+            xx = self.bin_centers
         else:
-            if self.deproj:
-                raise IOError('You set deproj=False, but your binned'
-                'visibilities are deprojected.')
+            if deproj:
+                try:
+                    xx = self.rho
+                except:
+                    raise IOError('You set deproj=True, but you have not '+
+                    'deprojected your visibilities yet.')
+            else:
+                xx = self.uvwave
 
         # Plot real part:
         if real:
-            if errtype == 'wt':
-                err = self.r_err
+            if binned:
+                yy = self.r_binned
+                if errtype == 'wt':
+                    err = self.r_err
+                else:
+                    err = self.r_sigma
             else:
-                err = self.r_sigma
+                yy = self.r
+                err = self.sigma
             if (os.path.isfile(outfile+'.real_vs_uvrad.pdf') == False) \
             or (overwrite):
                 fig = plt.figure()
                 ax = fig.add_subplot(1,1,1)
                 ax.set_ylabel('Real (Jy)')
                 ax.set_xlabel(r'uv distance (k$\lambda$)')
-                ax.errorbar(self.bin_centers/1000., self.r_binned, err,
-                fmt='bo', ms=5)
-                ax.axhline(y=0.0,color='k',linestyle='--')
+                ax.errorbar(xx/1000., yy, err, fmt='bo', ms=5)
+                ax.axhline(y=0.0, color='k', linestyle='--')
                 if xlim:
-                    ax.set_xlim([xlim[0],xlim[1]])
+                    ax.set_xlim([xlim[0], xlim[1]])
                 if ylim:
-                    ax.set_ylim([ylim[0],ylim[1]])
+                    ax.set_ylim([ylim[0], ylim[1]])
                 plt.savefig(outfile+'.real_vs_uvrad.pdf')
                 plt.close(fig)
             else:
@@ -399,31 +415,35 @@ class vis_obj(object):
 
         # Plot imaginary part:
         if imaginary:
-            if errtype == 'wt':
-                err = self.i_err
+            if binned:
+                yy = self.i_binned
+                if errtype == 'wt':
+                    err = self.i_err
+                else:
+                    err = self.i_sigma
             else:
-                err = self.i_sigma
+                yy = self.i
+                err = np.nan
             if (os.path.isfile(outfile+'.imaginary_vs_uvrad.pdf') == False) \
             or (overwrite):
                 fig = plt.figure()
                 ax = fig.add_subplot(1,1,1)
                 ax.set_ylabel('Imaginary (Jy)')
                 ax.set_xlabel(r'uv distance (k$\lambda$)')
-                ax.errorbar(self.bin_centers/1000., self.i_binned, err,
-                fmt='bo', ms=5)
-                ax.axhline(y=0.0,color='k',linestyle='--')
+                ax.errorbar(xx/1000., yy, err, fmt='bo', ms=5)
+                ax.axhline(y=0.0, color='k', linestyle='--')
                 if xlim:
-                    ax.set_xlim([xlim[0],xlim[1]])
+                    ax.set_xlim([xlim[0], xlim[1]])
                 if ylim:
-                    ax.set_ylim([ylim[0],ylim[1]])
+                    ax.set_ylim([ylim[0], ylim[1]])
                 plt.savefig(outfile+'.imaginary_vs_uvrad.pdf')
                 plt.close(fig)
             else:
                 print('WARNING, plot already exists and you do not want to'
                 'overwrite it')
 
-    def export_csv(self,binned=True,errtype='wt',outfile='visibilities_deproj',\
-    overwrite=False):
+    def export_csv(self, binned=True, errtype='wt',
+    outfile='visibilities_deproj', overwrite=False):
         '''
         Method to export the visibilities to a csv file.
         INPUTS:
@@ -471,7 +491,7 @@ class vis_obj(object):
                 str(self.wt[i])))
             f.close()
 
-    def export_fits(self,outfile='visibilities_deproj',overwrite=False):
+    def export_fits(self, outfile='visibilities_deproj', overwrite=False):
         '''
         Method to export the full set of visibilities (non-deprojected u,v
         coordinates) to a fits file.
@@ -498,7 +518,7 @@ class vis_obj(object):
 def residual_vis(model_vis, obs_vis, spwids=[], binned = False, deproj = True):
     '''
     NOTE: This assumes that the model visibilities have been calculated from
-    the uv coverage of the observed visibilities, so that the u,v coordinates
+    the uv coverage of the observed visibilities, so the u,v coordinates
     of each point are the same. This function does not do any interpolation that
     would be needed to calculate the residuals of a more general model.
     '''
@@ -522,9 +542,9 @@ def residual_vis(model_vis, obs_vis, spwids=[], binned = False, deproj = True):
 
     return res_vis
 
-def plot_mod_vis(model_vis,obsvis,resvis=None,real=True,imaginary=False,
-    deproj=True,errtype='wt',outfile='model',overwrite=False,normalize=False,
-    xlim=[],ylim=[]):
+def plot_mod_vis(model_vis, obsvis, resvis=None, real=True, imaginary=False,
+    deproj=True, errtype='wt', outfile='model', overwrite=False,
+    normalize=False, xlim=[], ylim=[]):
     '''
     Function to plot visiblities of model and of observation.
     INPUTS:
