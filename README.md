@@ -14,14 +14,23 @@ center of the visibilities.
 - bin_vis: method of the vis_obj object, it bins the visibilities.
 
 Example:
+
 (Within CASA)
+
 vis = get_vis_obs('myms.ms')
+
 vis.export_fits(outfile='myvis') # Saves the visibilities in myvis.fits
 
 (Within CASA or python)
+
 vis = vis_tools.vis_obj(input_file='myvis.fits')
+
 vis.deproject(45.0,45.0) # deproject visibilities
+
 vis.phase_shift(10.0,-10.0) # apply a shift to phase center
+
 vis.plot_vis(binned=False,outfile='plot_deproj_real') # Makes plot of deprojected visibilities
+
 vis.bin_vis(nbins=100,deproj=True) # Bin visibilities in 100 bins
+
 vis.plot_vis(outfile='plot_deproj_binned_real') # Makes plot of binned visibilities

@@ -49,8 +49,8 @@ class vis_obj(object):
         if input_file: # We read the visibilities from a file
             self.import_vis(input_file)
         else: # We create the object from the arrays provided
-            if (u == None) or (v == None) or (r == None) or (i == None) or \
-            (wt == None):
+            if (np.all(u) == None) or (np.all(v) == None) or (np.all(r) == None)\
+            or (np.all(i) == None) or (np.all(wt) == None):
                 raise IOError('Error in input: if input_file is not provided,'
                 'u, v, r, i, and wt have to be given as inputs')
             if (len(v) != len(u)) or (len(r) != len(u)) or (len(i) != len(u)) \
@@ -441,6 +441,25 @@ class vis_obj(object):
             else:
                 print('WARNING, plot already exists and you do not want to'
                 'overwrite it')
+
+    def append(self, vis2):
+        '''
+        Method to append another vis_obj to the existing one.
+        INPUTS:
+        - vis2: vis_obj that wants to be appended.
+        NOTE:
+        Keep in mind that you will need to deproject and/or bin the visibilities
+        again if you want to use those.
+        '''
+        self.u = np.concatenate([self.u, vis2.u])
+        self.v = np.concatenate([self.v, vis2.v])
+        self.r = np.concatenate([self.r, vis2.r])
+        self.i = np.concatenate([self.i, vis2.i])
+        self.wt = np.concatenate([self.wt, vis2.wt])
+        self.sigma = 1.0 / np.sqrt(self.wt)
+        self.uvwave = np.sqrt(self.u**2. + self.v**2.)
+        self.r_noshift = self.r
+        self.i_noshift = self.i
 
     def export_csv(self, binned=True, errtype='wt',
     outfile='visibilities_deproj', overwrite=False):
