@@ -4,6 +4,7 @@ import os
 import copy
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
+from scipy.stats import binned_statistic
 
 #-------------------------------------------------
 ################### CONSTANTS ####################
@@ -179,7 +180,8 @@ class vis_obj(object):
         self.r = vis_shifted.real
         self.i = vis_shifted.imag
 
-    def bin_vis(self, nbins=20, lambda_lim = None, deproj=True, use_wt=True):
+    def bin_vis(self, nbins=20, lambda_lim = None, deproj=True, use_wt=True,
+    imag=True):
         '''
         Method to bin the visibilities.
         INPUTS:
@@ -231,7 +233,7 @@ class vis_obj(object):
                     raise IOError('lambda_lim should have the same number '+
                     'of elements as nbins, or the same minus 1.')
                 elif len(nbins) == len(lambda_lim)+1:
-                    lambda_lim.append(max(uvwave))
+                    lambda_lim.append(np.max(uvwave))
                 elif len(nbins) < len(lambda_lim):
                     raise IOError('lambda_lim should have the same number '+
                     'of elements as nbins, or the same minus 1.')
@@ -243,101 +245,105 @@ class vis_obj(object):
                 if lambda_lim == None:
                     raise IOError('If nbins has two elements, lambda_lim needs'+
                     ' at least one value.')
-                lambda_lim = [lambda_lim,max(uvwave)]
+                lambda_lim = [lambda_lim,np.max(uvwave)]
             elif len(nbins) == 1:
                 if lambda_lim == None:
-                    lambda_lim = [max(uvwave)]
+                    lambda_lim = [np.max(uvwave)]
                 else:
                     lambda_lim = [lambda_lim]
         else:
-            nbins = [nbins]
             if type(lambda_lim) is list:
                 raise IOError('If lambda_lim is given as a list, nbins needs '+
                 'to be a list as well.')
             elif lambda_lim == None:
-                lambda_lim = [max(uvwave)]
-            else:
-                lambda_lim = [lambda_lim]
+                lambda_lim = np.max(uvwave)
 
         if use_wt:
             wt = self.wt
         else:
             wt = 1.0
 
-        ntot = sum(nbins)
-        self.bin_widths = np.ones(shape=(ntot))
-        self.bin_centers = np.ones(shape=(ntot))
-        self.r_binned = np.ones(shape=(ntot))
-        self.r_sigma = np.ones(shape=(ntot))
-        self.r_err = np.ones(shape=(ntot))
-        self.r_err2 = np.ones(shape=(ntot))
-        self.i_binned = np.ones(shape=(ntot))
-        self.i_sigma = np.ones(shape=(ntot))
-        self.i_err = np.ones(shape=(ntot))
-        i_min = 0
-        for i in range(len(nbins)):
-            if i == 0:
-                lambda_min = 0.0
-            else:
-                lambda_min = lambda_lim[i-1]
-            bin_width = (lambda_lim[i] - lambda_min)/nbins[i]
-            for j in range(nbins[i]):
-                self.bin_widths[i_min+j] = bin_width
-                self.bin_centers[i_min+j] = lambda_min + bin_width*j + bin_width/2.
-            i_min += nbins[i]
+        if type(nbins) is list:
+            ntot = sum(nbins)
+            self.bin_centers = np.ones(shape=(ntot))
+            self.r_binned = np.ones(shape=(ntot))
+            self.r_err = np.ones(shape=(ntot))
+            self.i_binned = np.ones(shape=(ntot))
+            self.i_err = np.ones(shape=(ntot))
+            i_min = 0
+            for i in range(len(nbins)):
+                if i == 0:
+                    lambda_min = np.min(uvwave)
+                else:
+                    lambda_min = lambda_lim[i-1]
+                range_bins = (lambda_min,lambda_lim[i])
 
-        for i in range(ntot):
-            bin_width = self.bin_widths[i]
-            inbin = np.where((uvwave > self.bin_centers[i]-bin_width/2.) &
-            (uvwave <= self.bin_centers[i]+bin_width/2.))
-            if len(inbin[0]) > 1:
-                if use_wt:
-                    N_inbin = len(self.r[inbin][wt[inbin] > 0])
+                binning_r, bin_edges, binnum = binned_statistic(uvwave, self.r*wt,
+                'sum', nbins[i], range_bins)
+                binning_wt = binned_statistic(uvwave, wt,
+                'sum', nbins[i], range_bins)[0]
+                if imag:
+                    binning_i = binned_statistic(uvwave, self.i*wt,
+                    'sum', nbins[i], range_bins)[0]
+                    binning_i[np.where(binning_wt == 0.)] = np.nan
+                binning_r[np.where(binning_wt == 0.)] = np.nan
+                binning_wt[np.where(binning_wt == 0.)] = np.nan
+
+                bin_width = (bin_edges[1]-bin_edges[0])
+                self.bin_centers[i_min:nbins[i]] = bin_edges[1:] - bin_width/2.0
+                self.r_binned[i_min:nbins[i]] = binning_r / binning_wt
+                self.r_err[i_min:nbins[i]] = np.sqrt(1.0 / binning_wt)
+                if imag:
+                    self.i_binned[i_min:nbins[i]] = binning_i / binning_wt
+                    self.i_err[i_min:nbins[i]] = np.sqrt(1.0 / binning_wt)
                 else:
-                    N_inbin = len(self.r[inbin])
+                    self.i_binned[i_min:nbins[i]] = None
+                    self.i_err[i_min:nbins[i]] = None
+                i_min += nbins[i]
+        else:
+            lambda_min = np.min(uvwave)
+            range_bins = (lambda_min,lambda_lim)
+            binning_r, bin_edges, binnum = binned_statistic(uvwave, self.r*wt,
+            'sum', nbins, range_bins)
+            binning_wt = binned_statistic(uvwave, wt,
+            'sum', nbins, range_bins)[0]
+            if imag:
+                binning_i = binned_statistic(uvwave, self.i*wt,
+                'sum', nbins, range_bins)[0]
+                binning_i[np.where(binning_wt == 0.)] = np.nan
+            binning_r[np.where(binning_wt == 0.)] = np.nan
+            binning_N = (np.bincount(binnum)[1:]).astype('float')
+            binning_N[np.where(binning_wt == 0.)] = np.nan
+            binning_wt[np.where(binning_wt == 0.)] = np.nan
+
+            bin_width = (bin_edges[1]-bin_edges[0])
+            self.bin_centers = bin_edges[1:] - bin_width/2.0
+            self.r_binned = binning_r / binning_wt
+            self.r_err = np.sqrt(1.0 / binning_wt)
+
+            # Possible corrections to the error, work in progress
+            # chisq = []
+            # bootstrap_factor = []
+            # for i in range(nbins):
+            #     if binning_N[i] > 1:
+            #         inbin = np.where(binnum==(i+1))
+            #         chisq.append(np.sum((self.r[inbin] - self.r_binned[i])**2.
+            #          * wt[inbin] ) / (binning_N[i]-1))
+            #         bootstrap_factor.append(np.sum((self.r[inbin] -
+            #         self.r_binned[i])**2. * wt[inbin]**2.)/ (binning_N[i]-1))
+            #     else:
+            #         chisq.append(1.0)
+            #         bootstrap_factor.append(1.0)
+            # # Correcting for under or over dispersion
+            # self.r_err2 = self.r_err * np.sqrt(np.array(chisq))
+            # # Bootstrapping solution
+            # self.r_err3 = np.sqrt(binning_N*np.array(bootstrap_factor))/binning_wt
+            if imag:
+                self.i_binned = binning_i / binning_wt
+                self.i_err = np.sqrt(1.0 / binning_wt)
             else:
-                N_inbin = 0
-            if N_inbin != 0:
-                if np.isnan(self.r[inbin]).any():
-                    print('WARNING: NaN in self.r')
-                if np.isnan(self.i[inbin]).any():
-                    print('WARNING: NaN in self.i')
-                # Real part
-                self.r_binned[i], wtsum = np.average(self.r[inbin],
-                weights=wt[inbin], returned=True)
-                if use_wt:
-                    # Weighted standard deviation of sample
-                    self.r_sigma[i] = np.sum(wt[inbin] * (self.r[inbin] -
-                    self.r_binned[i])**2.) / ((N_inbin - 1)*wtsum / N_inbin)
-                    # Error of weighted mean
-                    self.r_err[i] = ( np.std(self.r[inbin][wt[inbin] > 0]) *
-                    np.sqrt(np.sum(wt[inbin]**2.))/wtsum )
-                    self.r_err2[i] = 1./np.sqrt(wtsum)
-                else:
-                    self.r_sigma[i] = np.std(self.r[inbin])
-                    self.r_err[i] = self.r_sigma[i] / np.sqrt(N_inbin)
-                    self.r_err2[i] = np.nan
-                # Imaginary part
-                self.i_binned[i], wtsum = np.average(self.i[inbin],
-                weights=wt[inbin], returned=True)
-                if use_wt:
-                    # Weighted standard deviation of sample
-                    self.i_sigma[i] = np.sum(wt[inbin] * (self.i[inbin] -
-                    self.i_binned[i])**2.) / ((N_inbin - 1)*wtsum / N_inbin)
-                    # Error of weighted mean
-                    self.i_err[i] = ( np.std(self.i[inbin][wt[inbin] > 0]) *
-                    np.sqrt(np.sum(wt[inbin]**2.))/wtsum )
-                else:
-                    self.i_sigma[i] = np.std(self.i[inbin])
-                    self.i_err[i] = self.i_sigma[i] / np.sqrt(N_inbin)
-            else:
-                # If there are no points inside the bin, assign NaNs.
-                self.r_binned[i] = np.nan
-                self.r_sigma[i] = np.nan
-                self.r_err[i] = np.nan
-                self.i_binned[i] = np.nan
-                self.i_sigma[i] = np.nan
-                self.i_err[i] = np.nan
+                self.i_binned = None
+                self.i_err = None
 
     def plot_vis(self, real=True, imaginary=False, binned=True, deproj=None,
     nbins=20, errtype='wt', outfile='plot', overwrite=False, xlim=[], ylim=[]):
