@@ -144,22 +144,31 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
     It will also create a simulated measurement set.
 
     NOTE:
-    As of now, calms needs to have only one channel per spw.
+    For now, calms needs to have only one channel per spw.
     '''
     if len(model_images) != len(freqs):
         raise IOError('GET_SIM_MODEL: Number of frequencies should be the same'+
         ' as the number of input model images.')
     # We get the spectral windows of calms
-    ms.open(calms)
-    ms.selectinit(reset=True)
-    ms.selectinit()
-    axis_info = ms.getspectralwindowinfo()
-    ms.close()
+    # ms.open(calms)
+    # ms.selectinit(reset=True)
+    # ms.selectinit()
+    # axis_info = ms.getspectralwindowinfo()
+    # ms.close()
+    tb.open(calms)
+    spwids = np.unique(tb.getcol("DATA_DESC_ID"))
+    tb.close()
+    # Get the frequency information
+    tb.open(calms+'/SPECTRAL_WINDOW')
+    freqstb = tb.getcol("CHAN_FREQ")
+    tb.close()
+
     obs_spwids = []
     RefFreqs = []
-    for key in axis_info.keys():
+    for key in spwids:
         obs_spwids.append(int(key))
-        RefFreqs.append(round(axis_info[key]['RefFreq']/1e9,3)) # in GHz
+        # RefFreqs.append(round(axis_info[key]['RefFreq']/1e9,3)) # in GHz
+        RefFreqs.append(round(freqstb[:,key]/1e9,3)) # in GHz
     obs_spwids = np.array(obs_spwids)
     RefFreqs = np.array(RefFreqs)
 
@@ -182,13 +191,12 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
             raise ValueError('GET_SIM_MODEL: Frequency '+freq+' is not one of '+
             'the reference frequencies of calms. It could be a rounding issue.')
 
+        # Rotating image
+        imObj = pyfits.open(fitsimage)
+        Header = imObj[0].header  # we keep the header
+        mod_image = imObj[0].data[:,:] # image in matrix
+        imObj.close()
         if pa != 0.0:
-            # Rotating image
-            imObj = pyfits.open(fitsimage)
-            Header = imObj[0].header  # we keep the header
-            mod_image = imObj[0].data[:,:] # image in matrix
-            imObj.close()
-
             rotangle = -(pa)
             rotdisk = scipy.ndimage.interpolation.rotate(mod_image, rotangle,
             reshape=False)
@@ -198,7 +206,11 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
         # We get the inbright and pixel size
         stats = imstat(fitsimage)
         delt = Header['cdelt1'] * np.pi / 180. # in radians
-        inbright = str(stats['max'][0]*(delt**2.)*1.0e23)+'Jy/pixel'
+        if 'BUNIT' in Header.keys():
+            if Header['BUNIT'] == 'Jy/pixel':
+                inbright = str(stats['max'][0])+'Jy/pixel'
+        else:
+            inbright = str(stats['max'][0]*(delt**2.)*1.0e23)+'Jy/pixel'
         delta = delt*180./np.pi*3600. # in arcsec
 
         # We import the image into CASA format
