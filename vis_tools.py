@@ -180,8 +180,8 @@ class vis_obj(object):
         self.r = vis_shifted.real
         self.i = vis_shifted.imag
 
-    def bin_vis(self, nbins=20, lambda_lim = None, deproj=True, use_wt=True,
-    imag=True):
+    def bin_vis(self, nbins=20, lambda_lim = None, lambda_min = None,
+    deproj=True, use_wt=True, imag=True):
         '''
         Method to bin the visibilities.
         INPUTS:
@@ -195,6 +195,9 @@ class vis_obj(object):
         as a list with N elements, lambda_lim needs to have N or N-1 elements.
         If it has N-1, the last lambda_lim is assumed to be the maximum uv
         distance in the visibilities.
+        - lambda_min: minimum uv distance (in lambdas) to be used. If not given,
+        it uses the minimum uv distance in the visibilities. If nbins is given
+        as a list, lambda_min is only used for the first binning part.
         - use_wt: If False, it will not use the weights of each visibility t
         calculate weighted means in each bin, and will do a normal average
         instead.
@@ -273,7 +276,8 @@ class vis_obj(object):
             i_min = 0
             for i in range(len(nbins)):
                 if i == 0:
-                    lambda_min = np.min(uvwave)
+                    if lambda_min is None:
+                        lambda_min = np.min(uvwave)
                 else:
                     lambda_min = lambda_lim[i-1]
                 range_bins = (lambda_min,lambda_lim[i])
@@ -301,7 +305,8 @@ class vis_obj(object):
                     self.i_err[i_min:nbins[i]] = None
                 i_min += nbins[i]
         else:
-            lambda_min = np.min(uvwave)
+            if lambda_min is None:
+                lambda_min = np.min(uvwave)
             range_bins = (lambda_min,lambda_lim)
             binning_r, bin_edges, binnum = binned_statistic(uvwave, self.r*wt,
             'sum', nbins, range_bins)
