@@ -29,7 +29,7 @@ class CASA_vis_obj(vis_tools.vis_obj):
     - self.uvwave: uv distance (in lambdas, array).
     Extra attributes:
     - self.wl: array with wavelength of each spw in meters.
-    - self.freqs: attay with frequency of each spw in Hz.
+    - self.freqs: array with frequency of each spw in Hz.
     - self.spwids: spwi ids used.
     '''
     def __init__(self, mydat, freqs, name='', spwids=[], avg_pols=False):
@@ -126,8 +126,7 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
     listobs of the observations. It has to be a list, even if you are simulating
     just one frequency.
     - freqs: list of central frequencies of the spws and model_images. It has to
-    be a list, even if you are simulating just one frequency. In GHz, with just
-    six significant digits.
+    be a list, even if you are simulating just one frequency. In GHz.
     - fwidths: width of the spws of the observations. It can be a list with an
     element for each spw (freqs), or it can be just one value, and it will be
     assumed that all spws have the same width. In MHz.
@@ -168,7 +167,7 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
     for key in spwids:
         obs_spwids.append(int(key))
         # RefFreqs.append(round(axis_info[key]['RefFreq']/1e9,3)) # in GHz
-        RefFreqs.append(round(freqstb[:,key]/1e9,3)) # in GHz
+        RefFreqs.append(round(freqstb[:,key]/1e9,6)) # in GHz
     obs_spwids = np.array(obs_spwids)
     RefFreqs = np.array(RefFreqs)
 
@@ -177,6 +176,7 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
         resdat = []
     spwids = []
     for freqid,freq0 in enumerate(freqs):
+        freq0 = round(freq0,6) # we round the frequency to have 6 decimal digits
         freq = str(freq0) + 'GHz'
         fitsimage = model_images[freqid]
         if type(fwidths) is list:
@@ -205,13 +205,33 @@ def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
 
         # We get the inbright and pixel size
         stats = imstat(fitsimage)
-        delt = Header['cdelt1'] * np.pi / 180. # in radians
+        if 'CUNIT1' in Header.keys():
+            if Header['CUNIT1'] == 'deg':
+                delt = Header['CDELT1'] * np.pi / 180. # to radians
+            elif Header['CUNIT1'] == 'rad':
+                delt = Header['CDELT1']
+            else:
+                raise IOError('GET_SIM_MODEL: Potentially weird coordinate '+
+                'units. Please use deg or rad.')
+        else:
+            print('WARNING: Assuming units of model coordinates are deg.')
+            delt = Header['CDELT1'] * np.pi / 180. # to radians
+
         if 'BUNIT' in Header.keys():
             if Header['BUNIT'] == 'Jy/pixel':
                 inbright = str(stats['max'][0])+'Jy/pixel'
+            elif Header['BUNIT'] == 'W.m-2.pixel-1': # MCFOST format, nu*Fnu
+                inbright = stats['max'][0] / (freq0*1e9) / 1e-26 # to Jy
+                inbright = str(inbright)+'Jy/pixel'
+            elif Header['BUNIT'] == 'erg/s/cm2/Hz':
+                inbright = str(stats['max'][0]*(delt**2.)*1.0e23)+'Jy/pixel'
+            else:
+                raise IOError('GET_SIM_MODEL: Potentially weird intensity '+
+                'units. Please use Jy/pixel, W.m-2.pixel-1, or erg/s/cm2/Hz.')
         else:
+            print('WARNING: Assuming units of model are erg s-1 cm-2 Hz-1.')
             inbright = str(stats['max'][0]*(delt**2.)*1.0e23)+'Jy/pixel'
-        delta = delt*180./np.pi*3600. # in arcsec
+        delta = np.abs(delt)*180./np.pi*3600. # to arcsec
 
         # We import the image into CASA format
         imname0 = fitsimage[:-4]+'image'

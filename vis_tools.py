@@ -161,7 +161,7 @@ class vis_obj(object):
         (arbitrary units to simplify the example), and you want it to be at
         101,99, then the shift would be +1,-1. In the equations below, the
         sign of the offset is changed as it is taken into account as a
-        modification of the origin of coordinates. Following the above example,
+        modification to the origin of coordinates. Following the above example,
         if the position 100,100 is the original phase center, it would be the
         origin (0,0), and 101,99 would be the position +1,-1. If we want the
         latter to be the new phase center (i.e., the new 0,0 position), we need
@@ -371,7 +371,7 @@ class vis_obj(object):
         '''
         deproj = deproj if deproj is not None else self.deproj
         if binned:
-            if self.bin_centers == None:
+            if np.all(self.bin_centers) == None:
                 print('WARNING: Running bin_vis with nbins='+str(nbins))
                 self.bin_vis(nbins=nbins,deproj=deproj)
             if deproj:
