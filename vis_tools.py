@@ -317,8 +317,9 @@ class vis_obj(object):
                 'sum', nbins, range_bins)[0]
                 binning_i[np.where(binning_wt == 0.)] = np.nan
             binning_r[np.where(binning_wt == 0.)] = np.nan
-            binning_N = (np.bincount(binnum)[1:]).astype('float')
-            binning_N[np.where(binning_wt == 0.)] = np.nan
+            # Not used now, part of the work in progress below
+            # binning_N = (np.bincount(binnum)[1:]).astype('float')
+            # binning_N[np.where(binning_wt == 0.)] = np.nan
             binning_wt[np.where(binning_wt == 0.)] = np.nan
 
             bin_width = (bin_edges[1]-bin_edges[0])
