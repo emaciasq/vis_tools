@@ -73,8 +73,8 @@ class CASA_vis_obj(vis_tools.vis_obj):
                 u_temp = np.zeros_like(real_temp)
                 v_temp = np.zeros_like(real_temp)
                 for k in range(dat['real'].shape[1]): # For every channel
-                    u_temp[k,:] = dat['u'] / self.wl[i,k]
-                    v_temp[k,:] = dat['v'] / self.wl[i,k]
+                    u_temp[k,:] = dat['u'] / self.wl[i][k]
+                    v_temp[k,:] = dat['v'] / self.wl[i][k]
             else:
                 # We build the u, v, and wt arrays with the same shape
                 # as the visibilities
@@ -85,8 +85,8 @@ class CASA_vis_obj(vis_tools.vis_obj):
                 imag_temp = dat['imaginary']
                 for j in range(dat['real'].shape[0]): # For all polarizations
                     for k in range(dat['real'].shape[1]): # For every channel
-                        u_temp[j,k,:] = dat['u'] / self.wl[i,k]
-                        v_temp[j,k,:] = dat['v'] / self.wl[i,k]
+                        u_temp[j,k,:] = dat['u'] / self.wl[i][k]
+                        v_temp[j,k,:] = dat['v'] / self.wl[i][k]
                         wt_temp[j,k,:] = dat['weight'][j,:]
                 wt_temp[dat['flag'] == True] = 0.0
             # We select points that are not flagged
@@ -333,38 +333,50 @@ def get_vis_obs(calms, spwids=None, avg_pols=False, del_cross=False):
     for VLA observations, not for ALMA.
     OUTPUT:
     A vis_obj object with the visiblities in it.
+
+    NOTE:
+    The table tool is in principle the simplest method to obtain information
+    from a measurement set. Note, however, that the function tb.getcol() only
+    works if each spw has the same number of channels. tb has the getvarcol()
+    function that can be used with table with varying number of rows, but when
+    using this to retrieve the visibilities, the results are returned in a
+    dictionary that loses all the format of the data, which makes it impossible
+    to handle.
+    On the other hand, one can use the ms tool. This tool returns dictionaries
+    for each spw, conserving the format of the data. However, it cannot retrieve
+    the frequency information of each channel, only the representative freq,
+    channel width, number of channels, and freq of first channel for each spw.
+    Therefore, we use a mix of ms and tb to retrieve the frequency of each
+    channel, and the use the ms tool to retrieve the visibilities.
     '''
-    # We average the calibrated visibilities in channels and time
-    # obsms = calms
-    # Extract information of the channels
-    # ms.open(calms)
-    # ms.selectinit(reset=True)
-    # ms.selectinit()
-    # This method of getting the spw information does not seem to work always
-    # axis_info = ms.getspectralwindowinfo()
-
-    tb.open(calms)
-    # data = tb.getcol("DATA")
-    # flag = tb.getcol("FLAG")
-    # uvw = tb.getcol("UVW")
-    # weight = tb.getcol("WEIGHT")
-    if spwids == None:
-        spwids = np.unique(tb.getcol("DATA_DESC_ID"))
-    tb.close()
-    # Get the frequency information
-    tb.open(calms+'/SPECTRAL_WINDOW')
-    freqstb = tb.getcol("CHAN_FREQ")
-    tb.close()
-
+    # Extract information of the spws
     ms.open(calms)
     ms.selectinit(reset=True)
+    axis_info = ms.getspectralwindowinfo()
+    if spwids == None:
+        spwids = axis_info.keys()
+
+    # Extract information of the channels
+    tb.open(calms+'/SPECTRAL_WINDOW')
+    freqstb = tb.getvarcol("CHAN_FREQ")
+    tb.close()
+    # For some reason tb.getvarcol() creates a dict where the keys are different
+    # from ms.getspectralwindowinfo(). Instead of being 0,...,N, the keys are
+    # r1,...rN+1
+
     mydat = []
     freqs = []
     for spwid in spwids:
-        freqs.append(freqstb[:,spwid])
+        tbkey = 'r{}'.format(str(int(spwid)+1))
+        # We ensure that we are selecting the corresponding spwid
+        if freqstb[tbkey][0,0] != axis_info[spwid]['Chan1Freq']:
+            raise IOError('The frequencies between ms.getspectralwindowinfo() '+
+            ' and tb.getvarcol() do not match. Try splitting the data to make'+
+            ' sure that the first spw in your MS has spwid=0.')
+        freqs.append(freqstb[tbkey][:,0] / 1.0e9)
         # Extract visibilities of observation
         ms.selectinit(reset=True)
-        ms.selectinit(datadescid=spwid)
+        ms.selectinit(datadescid=int(spwid))
         obsdata = ms.getdata(['real','imaginary','u','v','weight','flag'])
         if del_cross:
             obsdata['flag'][1,:,:] = True
