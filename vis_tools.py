@@ -81,6 +81,7 @@ class vis_obj(object):
         the data.
         INPUTS:
         - input_file: name of file to be imported.
+
         FORMAT of input files:
         - CSV file:
         It needs to have 5 columns:
@@ -101,11 +102,31 @@ class vis_obj(object):
                 - weight of visibility point.
         The position of each of these axis should be enclosed in the header, in
         the UAXIS, VAXIS, RAXIS, IAXIS, and WTAXIS parameters.
+        - NPZ (binary) file:
+        Binary file with:
+                - u (lambdas)
+                - v (lambdas)
+                - V (visibilities, as in re+j*im; Jy)
+                - weights
+        - TXT file:
+        ASCII file with a 1 line header and 5 columns:
+                - u (lambdas)
+                - v (lambdas)
+                - Real part of visibilities (Jy)
+                - Imaginary part of visibilities (Jy)
+                - weight of visibility point.
         '''
         if type(input_file) is not str:
             raise IOError('input_file shoud be a string')
         if input_file[-4:] == '.csv':
-            data = np.genfromtxt(input_file,delimiter=',',skip_header=1)
+            data = np.genfromtxt(input_file, delimiter=',', skip_header=1)
+            u = data[:,0]
+            v = data[:,1]
+            r = data[:,2]
+            i = data[:,3]
+            wt = data[:,4]
+        if input_file[-4:] == '.txt':
+            data = np.genfromtxt(input_file, delimiter='\t', skip_header=1)
             u = data[:,0]
             v = data[:,1]
             r = data[:,2]
@@ -120,6 +141,14 @@ class vis_obj(object):
             r = data[header['RAXIS'],:]
             i = data[header['IAXIS'],:]
             wt = data[header['WTAXIS'],:]
+        elif input_file[-4:] == '.npz':
+            data = np.load(input_file)
+            u = data['u']
+            v = data['v']
+            vis = data['V']
+            r = vis.real
+            i = vis.imag
+            wt = data['weights']
 
         self.u = u
         self.v = v
@@ -531,7 +560,7 @@ class vis_obj(object):
         - overwrite: overwrite the existing file, if found? (boolean)
         '''
         if os.path.isfile(outfile+'.txt') and (overwrite == False):
-            raise IOError('EXPORT: FITS file exists and you do not want to'
+            raise IOError('EXPORT: TXT file exists and you do not want to'
             'overwrite it.')
         data = np.column_stack((self.u,self.v, self.r, self.i, self.wt))
         header = 'u(lambdas)\tv(lambdas)\tRe(Jy)\tIm(Jy)\tWeight'
@@ -546,7 +575,7 @@ class vis_obj(object):
         - overwrite: overwrite the existing file, if found? (boolean)
         '''
         if os.path.isfile(outfile+'.npz') and (overwrite == False):
-            raise IOError('EXPORT: FITS file exists and you do not want to'
+            raise IOError('EXPORT: NPZ file exists and you do not want to'
             'overwrite it.')
         data_vis = self.r + 1j*self.i
         np.savez(outfile+'.npz', u=self.u, v=self.v, V=data_vis,
@@ -557,7 +586,7 @@ class vis_obj(object):
         Method to export the full set of visibilities (non-deprojected u,v
         coordinates) to a fits file.
         INPUTS:
-        - outfile: name (without ".csv" extension) of the output file (string).
+        - outfile: name (without ".fits" extension) of the output file (string).
         - overwrite: overwrite the existing file, if found? (boolean)
         '''
         if os.path.isfile(outfile+'.fits') and (overwrite == False):
