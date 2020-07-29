@@ -373,7 +373,7 @@ def get_vis_obs(calms, spwids=None, avg_pols=False, del_cross=False):
             raise IOError('The frequencies between ms.getspectralwindowinfo() '+
             ' and tb.getvarcol() do not match. Try splitting the data to make'+
             ' sure that the first spw in your MS has spwid=0.')
-        freqs.append(freqstb[tbkey][:,0] / 1.0e9)
+        freqs.append(freqstb[tbkey][:,0])
         # Extract visibilities of observation
         ms.selectinit(reset=True)
         ms.selectinit(datadescid=int(spwid))

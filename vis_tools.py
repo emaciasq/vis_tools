@@ -522,7 +522,37 @@ class vis_obj(object):
                 str(self.wt[i])))
             f.close()
 
-    def export_fits(self, outfile='visibilities_deproj', overwrite=False):
+    def export_txt(self, outfile='visibilities', overwrite=False):
+        '''
+        Method to export the visibilities to a txt file, with the format used by
+        the code Frankestein.
+        INPUTS:
+        - outfile: name (without ".txt" extension) of the output file (string).
+        - overwrite: overwrite the existing file, if found? (boolean)
+        '''
+        if os.path.isfile(outfile+'.txt') and (overwrite == False):
+            raise IOError('EXPORT: FITS file exists and you do not want to'
+            'overwrite it.')
+        data = np.column_stack((self.u,self.v, self.r, self.i, self.wt))
+        header = 'u(lambdas)\tv(lambdas)\tRe(Jy)\tIm(Jy)\tWeight'
+        np.savetxt(outfile+'.txt', data, delimiter='\t',header=header)
+
+    def export_npz(self, outfile='visibilities', overwrite=False):
+        '''
+        Method to export the visibilities to an npz file, with the format used by
+        the code Frankestein.
+        INPUTS:
+        - outfile: name (without ".npz" extension) of the output file (string).
+        - overwrite: overwrite the existing file, if found? (boolean)
+        '''
+        if os.path.isfile(outfile+'.npz') and (overwrite == False):
+            raise IOError('EXPORT: FITS file exists and you do not want to'
+            'overwrite it.')
+        data_vis = self.r + 1j*self.i
+        np.savez(outfile+'.npz', u=self.u, v=self.v, V=data_vis,
+        weights=self.wt)
+
+    def export_fits(self, outfile='visibilities', overwrite=False):
         '''
         Method to export the full set of visibilities (non-deprojected u,v
         coordinates) to a fits file.
