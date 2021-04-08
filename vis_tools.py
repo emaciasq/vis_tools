@@ -612,7 +612,7 @@ def residual_vis(model_vis, obs_vis, spwids=[], binned = False, deproj = True):
     of each point are the same. This function does not do any interpolation that
     would be needed to calculate the residuals of a more general model.
     '''
-    if len(model_vis.u) != len(obsvis.u):
+    if len(model_vis.u) != len(obs_vis.u):
         raise IOError('residual_vis: model and observation visibilities have'
         'different dimensions. They probably have different spectral windows.')
 
