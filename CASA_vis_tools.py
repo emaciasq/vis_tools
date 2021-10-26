@@ -5,7 +5,9 @@ import numpy as np
 import os
 import vis_tools
 import scipy.ndimage
-from simutil import simutil
+# from simutil import simutil
+# for CASA 6
+from casatasks.private.simutil import simutil
 
 #-------------------------------------------------
 ################### CONSTANTS ####################

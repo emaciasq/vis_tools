@@ -239,9 +239,9 @@ class vis_obj(object):
         - self.i_binned: binned values of imaginary part of visibilities (in Jy,
          array).
         - self.r_sigma: standard deviation of values within bins for real part
-        of visibilities (in Jy, array).
+        of visibilities (in Jy, array). (weights ignored)
         - self.i_sigma: standard deviation of values within bins for imaginary
-        part of visibilities (in Jy, array).
+        part of visibilities (in Jy, array). (weights ignored)
         - self.r_err: error of the mean within bins for real part of
         visibilities (in Jy, array).
         - self.i_err: error of the mean within bins for imaginary part of
@@ -341,11 +341,17 @@ class vis_obj(object):
             'sum', nbins, range_bins)
             binning_wt = binned_statistic(uvwave, wt,
             'sum', nbins, range_bins)[0]
+            binning_r_std = binned_statistic(uvwave, self.r,
+            'std', nbins, range_bins)[0]
             if imag:
                 binning_i = binned_statistic(uvwave, self.i*wt,
                 'sum', nbins, range_bins)[0]
+                binning_i_std = binned_statistic(uvwave, self.i,
+                'std', nbins, range_bins)[0]
                 binning_i[np.where(binning_wt == 0.)] = np.nan
+                binning_i_std[np.where(binning_wt == 0.)] = np.nan
             binning_r[np.where(binning_wt == 0.)] = np.nan
+            binning_r_std[np.where(binning_wt == 0.)] = np.nan
             # Not used now, part of the work in progress below
             # binning_N = (np.bincount(binnum)[1:]).astype('float')
             # binning_N[np.where(binning_wt == 0.)] = np.nan
@@ -355,6 +361,7 @@ class vis_obj(object):
             self.bin_centers = bin_edges[1:] - bin_width/2.0
             self.r_binned = binning_r / binning_wt
             self.r_err = np.sqrt(1.0 / binning_wt)
+            self.r_sigma = binning_r_std
 
             # Possible corrections to the error, work in progress
             # chisq = []
@@ -376,9 +383,11 @@ class vis_obj(object):
             if imag:
                 self.i_binned = binning_i / binning_wt
                 self.i_err = np.sqrt(1.0 / binning_wt)
+                self.i_sigma = binning_i_std
             else:
                 self.i_binned = None
                 self.i_err = None
+                self.i_sigma = None
 
     def plot_vis(self, real=True, imaginary=False, binned=True, deproj=None,
     nbins=20, errtype='wt', outfile='plot', overwrite=False, xlim=[], ylim=[]):
