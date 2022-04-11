@@ -23,6 +23,7 @@ class vis_obj(object):
     - r: real part of visibilities (in Jy, array).
     - i: imaginary part of visibilitites (in Jy, array).
     - wt: weights of visibilities (array).
+    - wl: optional, wavelength of each datapoint (in m, array).
     - r_noshift, i_noshift: backup of real and imaginary parts
     without any shifts (in Jy, array).
     - uvwave: uv distance, not deprojected (in lambdas, array).
@@ -36,8 +37,8 @@ class vis_obj(object):
     u,v coordinates).
     - export_fits: exports visibilities (full u,v coordinates) to a fits file.
     '''
-    def __init__(self, u=None, v=None, r=None, i=None, wt=None, name='',
-    input_file=None):
+    def __init__(self, u=None, v=None, r=None, i=None, wt=None, wl=None, 
+        name='', input_file=None):
         '''
         INPUTS:
         Two possible ways:
@@ -63,6 +64,8 @@ class vis_obj(object):
             self.r = r
             self.i = i
             self.wt = wt
+            if np.all(wl) != None:
+                self.wl = wl
 
         self.sigma = 1.0 / np.sqrt(self.wt)
         self.uvwave = np.sqrt(self.u**2. + self.v**2.)

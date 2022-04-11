@@ -28,10 +28,9 @@ class CASA_vis_obj(vis_tools.vis_obj):
     - self.r: real part of visibilities (in Jy, array).
     - self.i: imaginary part of visibilitites (in Jy, array).
     - self.wt: weights of visibilities (array).
+    - self.wl: wavelength of each datapoint (in m, array).
     - self.uvwave: uv distance (in lambdas, array).
     Extra attributes:
-    - self.wl: array with wavelength of each spw in meters.
-    - self.freqs: array with frequency of each spw in Hz.
     - self.spwids: spwi ids used.
     '''
     def __init__(self, mydat, freqs, name='', spwids=[], avg_pols=False):
@@ -50,14 +49,15 @@ class CASA_vis_obj(vis_tools.vis_obj):
             mydat = [mydat]
         # if (type(freqs) is not list) and (type(freqs) is not np.ndarray):
         #     freqs = [freqs]
-        self.freqs = freqs # frequencies in Hz
+        # self.freqs = freqs # frequencies in Hz
         mydat = np.array(mydat)
-        self.wl = light_speed / self.freqs # wavelengths in meters
+        wl_spws = light_speed / freqs # wavelengths in meters
         rr = []
         ii = []
         uu = []
         vv = []
         wt = []
+        wl = []
         for i,dat in enumerate(mydat): # For all spws
             if avg_pols: # If we want to average the polarizations
                 wt_temp = np.zeros_like(dat['real'])
@@ -74,22 +74,26 @@ class CASA_vis_obj(vis_tools.vis_obj):
                 # as the visibilities
                 u_temp = np.zeros_like(real_temp)
                 v_temp = np.zeros_like(real_temp)
+                wl_temp = np.ones_like(real_temp)
                 for k in range(dat['real'].shape[1]): # For every channel
-                    u_temp[k,:] = dat['u'] / self.wl[i][k]
-                    v_temp[k,:] = dat['v'] / self.wl[i][k]
+                    u_temp[k,:] = dat['u'] / wl_spws[i][k]
+                    v_temp[k,:] = dat['v'] / wl_spws[i][k]
+                    wl_temp[k,:] *= wl_spws[i][k]
             else:
                 # We build the u, v, and wt arrays with the same shape
                 # as the visibilities
                 u_temp = np.zeros_like(dat['real'])
                 v_temp = np.zeros_like(dat['real'])
                 wt_temp = np.zeros_like(dat['real'])
+                wl_temp = np.ones_like(dat['real'])
                 real_temp = dat['real']
                 imag_temp = dat['imaginary']
                 for j in range(dat['real'].shape[0]): # For all polarizations
                     for k in range(dat['real'].shape[1]): # For every channel
-                        u_temp[j,k,:] = dat['u'] / self.wl[i][k]
-                        v_temp[j,k,:] = dat['v'] / self.wl[i][k]
+                        u_temp[j,k,:] = dat['u'] / wl_spws[i][k]
+                        v_temp[j,k,:] = dat['v'] / wl_spws[i][k]
                         wt_temp[j,k,:] = dat['weight'][j,:]
+                        wl_temp[j,k,:] *= wl_spws[i][k]
                 wt_temp[dat['flag'] == True] = 0.0
             # We select points that are not flagged
             # The indexing will flatten the array into a 1D array
@@ -98,16 +102,18 @@ class CASA_vis_obj(vis_tools.vis_obj):
             wt.append(wt_temp[wt_temp != 0.0])
             rr.append(real_temp[wt_temp != 0.0])
             ii.append(imag_temp[wt_temp != 0.0])
+            wl.append(wl_temp[wt_temp != 0.0])
         # We concatenate all spws together
         u = np.concatenate(uu,axis=0)
         v = np.concatenate(vv,axis=0)
         r = np.concatenate(rr,axis=0)
         i = np.concatenate(ii,axis=0)
         wt = np.concatenate(wt,axis=0)
+        wl = np.concatenate(wl,axis=0)
 
         self.spwids = spwids
 
-        super(CASA_vis_obj,self).__init__(u=u,v=v,r=r,i=i,wt=wt,name=name)
+        super(CASA_vis_obj,self).__init__(u=u,v=v,r=r,i=i,wt=wt,wl=wl,name=name)
 
 def get_sim_model(calms, model_images, freqs, fwidths, pa=0.0, indirection='',
     del_cross=False, residuals=True):
